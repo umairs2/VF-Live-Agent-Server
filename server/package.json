@@ -1,6 +1,9 @@
 {
   "name": "demo-streaming-server",
   "private": true,
+  "engines": {
+    "node": ">=14.18.0"
+  },
   "scripts": {
     "dev": "tsx --watch src/main.ts"
   },
