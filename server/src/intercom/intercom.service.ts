@@ -3,112 +3,109 @@ import { Client as IntercomClient } from "intercom-client";
 import { stripHtml } from "string-strip-html";
 import { WebSocket } from "ws";
 
-import {
-  connectLiveAgent,
-  disconnectLiveAgent,
-  sendLiveAgentMessage,
-} from "../sockets";
+import { connectLiveAgent, disconnectLiveAgent, sendLiveAgentMessage } from "../sockets";
 
 export class IntercomService {
-  private readonly intercom = new IntercomClient({
-    tokenAuth: { token: process.env.INTERCOM_TOKEN! },
-  });
-
-  private readonly conversations = new Map<string, WebSocket>();
-
-  private send(conversationID: string, event: { type: string; data: any }) {
-    const ws = this.conversations.get(conversationID);
-
-    ws?.send(JSON.stringify(event));
-  }
-
-  public async connectAgent(conversation: any) {
-    const agent = await this.intercom.admins.find({
-      id: conversation.admin_assignee_id,
+    private readonly intercom = new IntercomClient({
+        tokenAuth: { token: process.env.INTERCOM_TOKEN! },
     });
 
-    this.send(conversation.id, connectLiveAgent(conversation, agent));
-  }
+    private readonly conversations = new Map<string, WebSocket>();
 
-  public async disconnectAgent(conversation: any) {
-    const agent = await this.intercom.admins.find({
-      id: conversation.admin_assignee_id,
-    });
+    private send(conversationID: string, event: { type: string; data: any }) {
+        const ws = this.conversations.get(conversationID);
 
-    this.send(conversation.id, disconnectLiveAgent(conversation, agent));
-    this.conversations.get(conversation.id)?.close();
-    this.conversations.delete(conversation.id);
-  }
-
-  public async sendAgentReply(conversation: any) {
-    const html = conversation.conversation_parts.conversation_parts
-      .map((part: any) => part.body)
-      .join("\n");
-
-    this.send(conversation.id, sendLiveAgentMessage(stripHtml(html).result));
-  }
-
-  public async sendUserReply(
-    userID: string,
-    conversationID: string,
-    message: string,
-    attachmentUrls: string[]
-  ) {
-    await this.intercom.conversations.replyByIdAsUser({
-      id: conversationID,
-      intercomUserId: userID,
-      body: message,
-      attachmentUrls: attachmentUrls,
-    });
-  }
-
-  public async createConversation(userID: string) {
-    let finalUserID = null;
-    try {
-      const existingUser = await this.intercom.contacts.find({ id: userID });
-      finalUserID = existingUser.id;
-    } catch (e) {
-      const user = await this.intercom.contacts.createLead();
-      finalUserID = user.id;
+        ws?.send(JSON.stringify(event));
     }
 
-    const conversation = await this.intercom.conversations.create({
-      userId: finalUserID,
-      body: "<strong>A Webchat user has requested to speak with a Live Agent. The following is a transcript of the conversation with the Voiceflow Assistant:</strong>",
-    });
+    public async connectAgent(conversation: any) {
+        const agent = await this.intercom.admins.find({
+            id: conversation.admin_assignee_id,
+        });
 
-    return {
-      userID: finalUserID,
-      conversationID: conversation.conversation_id!,
-    };
-  }
-
-  public async sendHistory(
-    userID: string,
-    conversationID: string,
-    history: Array<{ author: string; text: string }>
-  ) {
-    for (const { author, text } of history) {
-      await this.intercom.conversations.replyByIdAsUser({
-        id: conversationID,
-        intercomUserId: userID,
-        body: `<strong>${author}:</strong> ${text}`,
-      });
+        this.send(conversation.id, connectLiveAgent(conversation, agent));
     }
-  }
 
-  public async subscribeToConversation(
-    conversationID: string,
-    ws: WebSocket,
-    handler: (event: { type: string; data: any }) => any
-  ) {
-    const conversation = await this.intercom.conversations
-      .find({ id: conversationID })
-      .catch(() => null);
-    if (!conversation) return;
+    public async disconnectAgent(conversation: any) {
+        const agent = await this.intercom.admins.find({
+            id: conversation.admin_assignee_id,
+        });
 
-    ws.on("message", (message) => handler(JSON.parse(message.toString())));
+        this.send(conversation.id, disconnectLiveAgent(conversation, agent));
+        this.conversations.get(conversation.id)?.close();
+        this.conversations.delete(conversation.id);
+    }
 
-    this.conversations.set(conversationID, ws);
-  }
+    public async sendAgentReply(conversation: any) {
+        const html = conversation.conversation_parts.conversation_parts.map((part: any) => part.body).join("\n");
+
+        this.send(conversation.id, sendLiveAgentMessage(stripHtml(html).result));
+    }
+
+    public async sendUserReply(userID: string, conversationID: string, message: string, attachmentUrls: string[]) {
+        await this.intercom.conversations.replyByIdAsUser({
+            id: conversationID,
+            intercomUserId: userID,
+            body: message,
+            attachmentUrls: attachmentUrls,
+        });
+    }
+
+    public async assignConversation(conversationID: any) {
+        try {
+            const response = await this.intercom.conversations.assign({
+                id: conversationID,
+                adminId: "6876610",
+                type: "admin",
+                assigneeId: "6876622",
+            });
+
+            console.log(response);
+        } catch (error) {
+            console.log(error.message);
+        }
+    }
+
+    public async createConversation(userID: string, name: string, email: string) {
+        let finalUserID = null;
+        try {
+            const existingUser = await this.intercom.contacts.find({ id: userID });
+            finalUserID = existingUser.id;
+        } catch (e) {
+            const user = await this.intercom.contacts.createUser({
+                name: name,
+                email: email,
+            });
+            finalUserID = user.id;
+        }
+
+        const conversation = await this.intercom.conversations.create({
+            userId: finalUserID,
+            body: "<strong>A Webchat user has requested to speak with a Live Agent. The following is a transcript of the conversation with the Voiceflow Assistant:</strong>",
+        });
+
+        return {
+            userID: finalUserID,
+            conversationID: conversation.conversation_id!,
+        };
+    }
+
+    public async sendHistory(userID: string, conversationID: string, history: Array<{ author: string; text: string }>) {
+        for (const { author, text } of history) {
+            await this.intercom.conversations.replyByIdAsUser({
+                id: conversationID,
+                intercomUserId: userID,
+                body: `<strong>${author}:</strong> ${text}`,
+            });
+        }
+    }
+
+    public async subscribeToConversation(conversationID: string, ws: WebSocket, handler: (event: { type: string; data: any }) => any) {
+        const conversation = await this.intercom.conversations.find({ id: conversationID }).catch(() => null);
+        if (!conversation) return;
+
+        ws.on("message", (message) => handler(JSON.parse(message.toString())));
+
+        this.conversations.set(conversationID, ws);
+    }
 }
