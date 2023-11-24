@@ -163,16 +163,36 @@ export class IntercomService {
     };
   }
 
+  // public async sendHistory(
+  //   userID: string,
+  //   conversationID: string,
+  //   history: Array<{ author: string; text: string }>
+  // ) {
+  //   for (const { author, text } of history) {
+  //     await this.intercom.conversations.replyByIdAsUser({
+  //       id: conversationID,
+  //       intercomUserId: userID,
+  //       body: `<strong>${author}:</strong> ${text}`,
+  //     });
+  //   }
+  // }
+
   public async sendHistory(
     userID: string,
     conversationID: string,
     history: Array<{ author: string; text: string }>
   ) {
-    for (const { author, text } of history) {
+    // Combine all messages into a single string
+    const combinedMessage = history
+      .map(({ author, text }) => `<strong>${author}:</strong> ${text}`)
+      .join("<br>"); // Use <br> for line breaks
+
+    // Send the combined message as one reply
+    if (combinedMessage) {
       await this.intercom.conversations.replyByIdAsUser({
         id: conversationID,
         intercomUserId: userID,
-        body: `<strong>${author}:</strong> ${text}`,
+        body: combinedMessage,
       });
     }
   }
